@@ -18,11 +18,11 @@ jobs:
     - name: Compiling Firmware
       run: |
         sudo apt update
-        sudo apt install zstd -y
+        sudo apt install wget -y
         mkdir -p downloads
         cd downloads
-        wget -O Windows11Optimum_25H2_Pro_v2.iso --load-cookies cookies.txt "https://pixeldrain.com/api/file/REYp5YR4?download"
-        zstd --ultra -22 --long=31 Windows11Optimum_25H2_Pro_v2.iso -o Windows11Optimum_25H2_Pro_v2.iso.zst
+        # wget -O Windows11Optimum_25H2_Pro_v2.iso --load-cookies cookies.txt "https://pixeldrain.com/api/file/REYp5YR4?download"
+        wget -O Windows11Optimum_26H1_Pro_v2.iso --load-cookies cookies.txt https://pixeldrain.com/api/file/ZdPxkVmH?download
         
     - name: Determine release tag
       id: get_tag
