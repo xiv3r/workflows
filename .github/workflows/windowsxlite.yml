@@ -1,4 +1,4 @@
-name: Windows
+name: 24.10.4
 
 on:
   workflow_dispatch:
@@ -15,12 +15,12 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Download files
+    - name: Compiling Firmware
       run: |
         mkdir -p downloads
         cd downloads
         wget -O windows11Optimum_25H2_Pro_v2.iso --load-cookies cookies.txt "https://pixeldrain.com/api/file/REYp5YR4?download"
-                   
+        
     - name: Determine release tag
       id: get_tag
       run: |
@@ -70,11 +70,11 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Upload files to existing release
+    - name: Uploading files
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ steps.get_tag.outputs.tag_name }}
         files: |
-          downloads/*.iso
+          *.iso
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
