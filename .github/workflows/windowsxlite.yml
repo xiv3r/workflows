@@ -19,7 +19,7 @@ jobs:
       run: |
         mkdir -p downloads
         cd downloads
-        wget -O windows.iso --load-cookies cookies.txt "https://pixeldrain.com/api/file/REYp5YR4?download"
+        wget -O windows11Optimum_25H2_Pro_v2.iso --load-cookies cookies.txt "https://pixeldrain.com/api/file/REYp5YR4?download"
                    
     - name: Determine release tag
       id: get_tag
@@ -27,7 +27,7 @@ jobs:
         if [ "${{ github.event_name }}" == "release" ]; then
           TAG_NAME="${{ github.event.release.tag_name }}"
         else
-          TAG_NAME="artifact"
+          TAG_NAME="windows"
         fi
         echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
 
@@ -75,6 +75,6 @@ jobs:
       with:
         tag_name: ${{ steps.get_tag.outputs.tag_name }}
         files: |
-          downloads/*.*
+          downloads/*.iso
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
