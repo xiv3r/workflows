@@ -18,8 +18,7 @@ jobs:
     - name: Compiling Firmware
       run: |
         mkdir -p downloads
-        cd downloads
-        wget -O windows11Optimum_25H2_Pro_v2.iso --load-cookies cookies.txt "https://pixeldrain.com/api/file/REYp5YR4?download"
+        wget -O downloads/windows11Optimum_25H2_Pro_v2.iso --load-cookies cookies.txt "https://pixeldrain.com/api/file/REYp5YR4?download"
         
     - name: Determine release tag
       id: get_tag
@@ -75,6 +74,6 @@ jobs:
       with:
         tag_name: ${{ steps.get_tag.outputs.tag_name }}
         files: |
-          *.iso
+          downloads/*.iso
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
