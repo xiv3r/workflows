@@ -21,10 +21,10 @@ jobs:
         cd downloads
         sudo apt update
         sudo apt install wget binwalk -y
-        wget -O full.bin https://raw.githubusercontent.com/xiv3r/workflows/refs/heads/main/binwalk/full.bin
-        
+            
     - name: Firmware Information
       run: |
+        wget -O full.bin https://raw.githubusercontent.com/xiv3r/workflows/refs/heads/main/binwalk/full.bin
         binwalk --term full.bin
 
     - name: Extracting Firmware
