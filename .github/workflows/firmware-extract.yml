@@ -19,6 +19,8 @@ jobs:
       run: |
         mkdir -p downloads
         cd downloads
+        sudo apt update 
+        sudo apt install wget -y
         wget -O full.bin https://raw.githubusercontent.com/xiv3r/workflows/refs/heads/main/binwalk/full.bin
       
     - name: Extracting Firmware
