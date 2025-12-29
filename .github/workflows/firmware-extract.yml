@@ -19,14 +19,8 @@ jobs:
       run: |
         mkdir -p downloads
         cd downloads
-        
-        sudo apt update 
-        sudo apt install wget -y
         wget -O full.bin https://raw.githubusercontent.com/xiv3r/workflows/refs/heads/main/binwalk/full.bin
-      
-    - name: Extracting Firmware
-      run: |
-        dd if=full.bin of=firmware.bin bs=1 skip=327680 count=16212736
+        dd if=full.bin of=firmware.bin bs=1 skip=327680 count=16212480
       
     - name: Determine release tag
       id: get_tag
