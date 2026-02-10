@@ -2,45 +2,243 @@ name: Build ESP8266 Firmware
 
 on:
   push:
-    tags: ['v*']
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
   workflow_dispatch:
+
+env:
+  # ESP-IDF Configuration
+  IDF_PATH: ${{ github.workspace }}/esp-idf
+  IDF_VERSION: v5.1.2
+  IDF_TARGET: esp8266
+  PYTHON_VERSION: "3.11"
 
 jobs:
   build:
+    name: Build ESP8266 Firmware
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            wget \
+            flex \
+            bison \
+            gperf \
+            python3-pip \
+            python3-venv \
+            cmake \
+            ninja-build \
+            ccache \
+            libffi-dev \
+            libssl-dev \
+            dfu-util \
+            libusb-1.0-0
+
+      - name: Cache ESP-IDF
+        uses: actions/cache@v3
+        id: cache-idf
+        with:
+          path: ${{ env.IDF_PATH }}
+          key: esp-idf-${{ env.IDF_VERSION }}-${{ runner.os }}
+          restore-keys: |
+            esp-idf-${{ env.IDF_VERSION }}-
+
+      - name: Download and Setup ESP-IDF
+        if: steps.cache-idf.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ${{ env.IDF_PATH }}
+          cd ${{ env.IDF_PATH }}
+          git clone --recursive --depth 1 --branch ${{ env.IDF_VERSION }} \
+            https://github.com/espressif/esp-idf.git .
+          
+      - name: Install ESP-IDF Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          ${{ env.IDF_PATH }}/tools/idf_tools.py install-python-env
+          ${{ env.IDF_PATH }}/tools/idf_tools.py install required
+          
+      - name: Setup ESP-IDF Environment
+        run: |
+          source ${{ env.IDF_PATH }}/export.sh
+          echo "IDF_PATH=${{ env.IDF_PATH }}" >> $GITHUB_ENV
+
+      - name: Configure Project
+        run: |
+          source ${{ env.IDF_PATH }}/export.sh
+          cd ${{ github.workspace }}
+          idf.py set-target esp8266
+          idf.py menuconfig --save-env
+
+      - name: Build Firmware
+        run: |
+          source ${{ env.IDF_PATH }}/export.sh
+          cd ${{ github.workspace }}
+          idf.py build
+
+      - name: Generate Binary Files
+        run: |
+          source ${{ env.IDF_PATH }}/export.sh
+          cd ${{ github.workspace }}
+          idf.py image-info build/esp8266_image_info.txt || true
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: firmware-${{ github.run_id }}
+          path: |
+            build/
+            !build/**/*.o
+            !build/**/*.d
+          retention-days: 30
+
+      - name: Upload Firmware Binary
+        uses: actions/upload-artifact@v3
+        if: success()
+        with:
+          name: esp8266-firmware-${{ github.sha }}
+          path: build/esp8266.bin
+          retention-days: 30
+
+      - name: Check Build Status
+        if: always()
+        run: |
+          source ${{ env.IDF_PATH }}/export.sh
+          cd ${{ github.workspace }}
+          echo "Build completed successfully!" 
+          ls -lh build/esp8266.bin || echo "Binary file not found"
+
+  # Optional: Flash to device (requires hardware)
+  flash:
+    name: Flash to Device (Optional)
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     
-    - name: Setup ESP-IDF
-      run: |
-        # One-liner setup
-        sudo apt-get update && sudo apt-get install -y git wget flex bison gperf python3 python3-pip cmake ninja-build
-        git clone --depth 1 https://github.com/espressif/ESP8266_RTOS_SDK.git ~/esp-idf
-        cd ~/esp-idf && ./install.sh
-        . ~/esp-idf/export.sh
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-pip \
+            python3-venv \
+            libusb-1.0-0 \
+            usbutils
+
+      - name: Download Firmware
+        uses: actions/download-artifact@v3
+        with:
+          name: esp8266-firmware-${{ github.sha }}
+
+      - name: Install esptool
+        run: |
+          python -m pip install --upgrade pip esptool
+
+      - name: Flash Firmware to Device
+        run: |
+          # Note: This requires the device to be connected via USB
+          # Adjust the port and baud rate as needed
+          esptool.py -p /dev/ttyUSB0 -b 460800 write_flash -fm dio -fs 32m 0x0 esp8266.bin
+        continue-on-error: true
+
+  # Optional: Code Quality Checks
+  lint:
+    name: Code Quality
+    runs-on: ubuntu-latest
     
-    - name: Build
-      run: |
-        . ~/esp-idf/export.sh
-        cd .  # Change to your project folder if needed
-        idf.py set-target esp8266
-        idf.py build
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black clang-format
+
+      - name: Run Python Linting
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || true
+
+      - name: Check Code Formatting
+        run: |
+          black --check . || true
+
+  # Optional: Build Matrix for Multiple Configurations
+  build-matrix:
+    name: Build Matrix - ${{ matrix.idf_version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        idf_version: [v5.0.6, v5.1.2]
+        idf_target: [esp8266]
     
-    - name: Package and Release
-      if: startsWith(github.ref, 'refs/tags/')
-      run: |
-        # Create zip with firmware
-        mkdir -p release
-        cp build/*.bin release/ 2>/dev/null || true
-        cd release
-        zip -r ../firmware-${{ github.ref_name }}.zip .
-        cd ..
-        
-        # Create release using GitHub CLI
-        gh release create ${{ github.ref_name }} \
-          --title "Firmware ${{ github.ref_name }}" \
-          --notes "Auto-generated firmware release" \
-          firmware-${{ github.ref_name }}.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git wget flex bison gperf cmake ninja-build ccache \
+            libffi-dev libssl-dev
+
+      - name: Setup ESP-IDF (${{ matrix.idf_version }})
+        run: |
+          IDF_PATH="${{ github.workspace }}/esp-idf-${{ matrix.idf_version }}"
+          mkdir -p "$IDF_PATH"
+          cd "$IDF_PATH"
+          git clone --recursive --depth 1 --branch ${{ matrix.idf_version }} \
+            https://github.com/espressif/esp-idf.git .
+          "$IDF_PATH/tools/idf_tools.py" install-python-env
+          "$IDF_PATH/tools/idf_tools.py" install required
+          echo "IDF_PATH=$IDF_PATH" >> $GITHUB_ENV
+
+      - name: Build for ESP8266
+        run: |
+          source ${{ env.IDF_PATH }}/export.sh
+          cd ${{ github.workspace }}
+          idf.py set-target esp8266
+          idf.py build
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: firmware-${{ matrix.idf_version }}-${{ github.run_id }}
+          path: build/esp8266.bin
+          retention-days: 30
