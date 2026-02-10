@@ -1,0 +1,50 @@
+name: Kali Updated RootFS
+
+on:
+  workflow_dispatch: # Allows manual trigger
+  push:
+    tags:
+      - 'v*' # Optional: Run on version tags like v1.0.0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y proot tar xz-utils
+
+      - name: Download Kali NetHunter RootFS
+        run: |
+          wget -q "https://kali.download/nethunter-images/current/rootfs/kali-nethunter-rootfs-minimal-arm64.tar.xz" -O rootfs.tar.xz
+
+      - name: Extract RootFS
+        run: |
+          mkdir -p kali-rootfs
+          tar -xf rootfs.tar.xz -C kali-rootfs --strip-components=1
+
+      - name: Update and Upgrade inside Proot
+        run: |
+          proot -S kali-rootfs /bin/bash -c "
+          apt-get update &&
+          apt-get upgrade -y &&
+          apt-get clean
+          "
+
+      - name: Compress Updated RootFS
+        run: |
+          cd kali-rootfs
+          tar -cJf ../kali-nethunter-rootfs-updated-arm64.tar.xz .
+
+      - name: Create GitHub Release and Upload
+        uses: softprops/action-gh-release@v1
+        with:
+          files: kali-nethunter-rootfs-updated-arm64.tar.xz
+          tag_name: ${{ github.ref_name }} # Uses the tag that triggered the workflow
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
