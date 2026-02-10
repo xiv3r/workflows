@@ -1,86 +1,215 @@
-name: Build Kali Linux ARM64 Tarballs
+name: Build Kali Linux ARM64 Minimal
 
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Kali Linux version'
+      tag_name:
+        description: 'Tag name (e.g., v1.0.0)'
         required: true
-        default: '2025.4'
+        default: 'v1.0.0'
+      release_notes:
+        description: 'Release notes'
+        required: false
+        default: 'Kali Linux ARM64 minimal build'
+
+permissions:
+  contents: write
+  packages: write
 
 env:
-  KALI_VERSION: "2025.4"
+  BUILD_DIR: ${{ github.workspace }}/build
+  ARTIFACT_NAME: kali-linux-arm64-minimal
 
 jobs:
-  build-tarballs:
+  build:
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
-      - name: Setup environment
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            wget \
-            xz-utils \
-            pigz \
-            curl \
-            gnupg \
-            debootstrap
+    - name: Set up environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          live-build \
+          debootstrap \
+          curl \
+          wget \
+          gnupg \
+          zip \
+          unzip \
+          xz-utils \
+          cpio \
+          dosfstools \
+          mtools \
+          squashfs-tools \
+          xorriso \
+          isolinux \
+          syslinux-efi \
+          qemu-user-static \
+          binfmt-support
+        
+        # Enable ARM execution
+        sudo systemctl restart systemd-binfmt
 
-      - name: Set version
-        id: set-version
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
-            TAG_NAME="${GITHUB_REF#refs/tags/}"
-            echo "version=${TAG_NAME#v}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${{ env.KALI_VERSION }}" >> $GITHUB_OUTPUT
-          fi
+    - name: Create build directory
+      run: |
+        mkdir -p ${{ env.BUILD_DIR }}
+        cd ${{ env.BUILD_DIR }}
 
-      - name: Create tarballs using live-build
-        env:
-          VERSION: ${{ steps.set-version.outputs.version }}
-        run: |
-          mkdir -p build release
-          
-          # Install live-build for Kali
-          sudo apt-get install -y live-build
-          
-          # Create configuration for minimal build
-          mkdir -p kali-config
-          cd kali-config
-          
-          # Initialize live-build configuration
-          lb config --architecture arm64 --distribution kali-rolling \
-            --archive-areas "main contrib non-free" \
-            --debootstrap-options "--variant=minbase" \
-            --binary-images tar \
-            --chroot-filesystem plain
-          
-          # Build ARM64 tarball
-          sudo lb build
-          
-          # Move and rename the output
-          mv ../live-image-arm64.tar.gz ../release/kali-linux-minimal-arm64-$VERSION.tar.gz
-          
-          # Create checksum
-          cd ../release
-          sha256sum kali-linux-minimal-arm64-$VERSION.tar.gz > kali-linux-minimal-arm64-$VERSION.tar.gz.sha256
+    - name: Configure live-build
+      run: |
+        cd ${{ env.BUILD_DIR }}
+        lb config \
+          --architecture arm64 \
+          --distribution kali-rolling \
+          --binary-images tar \
+          --system live \
+          --apt-secure true \
+          --apt-recommends false \
+          --debian-installer false \
+          --updates false \
+          --security-updates false \
+          --firmware-binary false \
+          --clean \
+          --checksums sha256
+        
+        # Create minimal package list
+        mkdir -p config/package-lists/
+        cat > config/package-lists/kali.list.chroot << 'EOF'
+        kali-linux-core
+        kali-tweaks
+        network-manager
+        sudo
+        curl
+        wget
+        vim
+        openssh-server
+        kali-defaults
+        EOF
+        
+        # Enable root login for SSH (remove for production)
+        mkdir -p config/includes.chroot/etc/ssh/
+        echo "PermitRootLogin yes" > config/includes.chroot/etc/ssh/sshd_config
 
-      - name: Upload to Release
-        uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ steps.set-version.outputs.version }}
-          release_name: "Kali Linux Minimal v${{ steps.set-version.outputs.version }}"
-          files: |
-            release/kali-linux-minimal-*.tar.gz
-            release/kali-linux-minimal-*.tar.gz.sha256
+    - name: Build Kali Linux
+      run: |
+        cd ${{ env.BUILD_DIR }}
+        sudo lb build 2>&1 | tee build.log
+        
+        # Check if build succeeded
+        if [ -f "live-image-arm64.tar.xz" ]; then
+          echo "Build successful"
+          ls -la *.tar.xz
+        else
+          echo "Build failed"
+          exit 1
+        fi
+
+    - name: Generate checksums
+      run: |
+        cd ${{ env.BUILD_DIR }}
+        for file in *.tar.xz; do
+          sha256sum "$file" > "${file}.sha256"
+          sha512sum "$file" > "${file}.sha512"
+        done
+
+    - name: Prepare artifacts
+      run: |
+        cd ${{ env.BUILD_DIR }}
+        mkdir -p artifacts
+        
+        # Move and rename artifacts
+        for file in live-image-*.tar.xz*; do
+          new_name="${file/live-image-arm64.tar.xz/${{ env.ARTIFACT_NAME }}-${{ github.ref_name }}.tar.xz}"
+          cp "$file" "artifacts/${new_name}"
+        done
+        
+        # Copy build log
+        cp build.log artifacts/build-${{ github.ref_name }}.log
+        
+        ls -la artifacts/
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: kali-arm64-build
+        path: ${{ env.BUILD_DIR }}/artifacts/
+        retention-days: 5
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' || github.event.inputs.tag_name
+    
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: kali-arm64-build
+        path: artifacts
+
+    - name: Determine tag name
+      id: tag_name
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+        else
+          echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.tag_name.outputs.TAG_NAME }}
+        name: Kali Linux ARM64 Minimal ${{ steps.tag_name.outputs.TAG_NAME }}
+        body: |
+          Kali Linux ARM64 Minimal Build
+          
+          **Build Details:**
+          - Version: ${{ steps.tag_name.outputs.TAG_NAME }}
+          - Date: $(date -u +'%Y-%m-%d')
+          - Architecture: ARM64 (aarch64)
+          - Base: Kali Rolling
+          
+          **SHA256 Checksums:**
+          ```
+          $(cat artifacts/*.sha256)
+          ```
+          
+          **Usage:**
+          ```bash
+          # Extract and use
+          tar xf kali-linux-arm64-minimal-*.tar.xz
+          ```
+        draft: false
+        prerelease: false
+        files: |
+          artifacts/*.tar.xz
+          artifacts/*.sha256
+          artifacts/*.sha512
+          artifacts/build-*.log
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: [build, release]
+    if: always()
+    
+    steps:
+    - name: Build Status
+      run: |
+        if [ "${{ needs.build.result }}" = "success" ]; then
+          echo "✅ Build completed successfully"
+        else
+          echo "❌ Build failed"
+          exit 1
+        fi
