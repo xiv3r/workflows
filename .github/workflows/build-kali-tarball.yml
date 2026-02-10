@@ -1,0 +1,86 @@
+name: Build Kali Linux ARM64 Tarballs
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Kali Linux version'
+        required: true
+        default: '2025.4'
+
+env:
+  KALI_VERSION: "2025.4"
+
+jobs:
+  build-tarballs:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            wget \
+            xz-utils \
+            pigz \
+            curl \
+            gnupg \
+            debootstrap
+
+      - name: Set version
+        id: set-version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+            echo "version=${TAG_NAME#v}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ env.KALI_VERSION }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create tarballs using live-build
+        env:
+          VERSION: ${{ steps.set-version.outputs.version }}
+        run: |
+          mkdir -p build release
+          
+          # Install live-build for Kali
+          sudo apt-get install -y live-build
+          
+          # Create configuration for minimal build
+          mkdir -p kali-config
+          cd kali-config
+          
+          # Initialize live-build configuration
+          lb config --architecture arm64 --distribution kali-rolling \
+            --archive-areas "main contrib non-free" \
+            --debootstrap-options "--variant=minbase" \
+            --binary-images tar \
+            --chroot-filesystem plain
+          
+          # Build ARM64 tarball
+          sudo lb build
+          
+          # Move and rename the output
+          mv ../live-image-arm64.tar.gz ../release/kali-linux-minimal-arm64-$VERSION.tar.gz
+          
+          # Create checksum
+          cd ../release
+          sha256sum kali-linux-minimal-arm64-$VERSION.tar.gz > kali-linux-minimal-arm64-$VERSION.tar.gz.sha256
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.set-version.outputs.version }}
+          release_name: "Kali Linux Minimal v${{ steps.set-version.outputs.version }}"
+          files: |
+            release/kali-linux-minimal-*.tar.gz
+            release/kali-linux-minimal-*.tar.gz.sha256
