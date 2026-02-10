@@ -17,19 +17,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y wget proot tar xz-utils
-
-      - name: Download Kali NetHunter RootFS
-        run: |
-          wget -q "https://kali.download/nethunter-images/current/rootfs/kali-nethunter-rootfs-minimal-arm64.tar.xz" -O rootfs.tar.xz
-
+          
       - name: Extract RootFS
         run: |
-          mkdir -p kali-rootfs
-          tar -xf rootfs.tar.xz -C kali-rootfs --strip-components=1 --exclude=dev/*
+          wget -q "https://kali.download/nethunter-images/current/rootfs/kali-nethunter-rootfs-minimal-arm64.tar.xz" -O rootfs.tar.xz
+          tar -xf rootfs.tar.xz --strip-components=1 --exclude=dev/*
 
       - name: Update and Upgrade inside Proot
         run: |
-          proot -S kali-rootfs /bin/bash -c "
+          proot -S kali-arm64 /bin/bash -c "
           apt update &&
           apt upgrade -y &&
           apt autoclean -y &&
@@ -38,7 +34,7 @@ jobs:
 
       - name: Compress Updated RootFS
         run: |
-          cd kali-rootfs
+          cd kali-arm64
           tar -cJf ../kali-nethunter-rootfs-updated-arm64.tar.xz .
 
       - name: Create GitHub Release and Upload
