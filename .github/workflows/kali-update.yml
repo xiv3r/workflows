@@ -25,7 +25,7 @@ jobs:
       - name: Extract RootFS
         run: |
           mkdir -p kali-rootfs
-          sudo tar -xf rootfs.tar.xz -C kali-rootfs --strip-components=1
+          sudo tar -xf rootfs.tar.xz -C kali-rootfs --strip-components=1 --warning=no-all
 
       - name: Update and Upgrade inside Proot
         run: |
