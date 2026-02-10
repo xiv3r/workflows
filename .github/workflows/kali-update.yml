@@ -16,7 +16,7 @@ jobs:
       - name: Set up environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y proot tar xz-utils
+          sudo apt-get install -y wget proot tar xz-utils
 
       - name: Download Kali NetHunter RootFS
         run: |
@@ -25,15 +25,15 @@ jobs:
       - name: Extract RootFS
         run: |
           mkdir -p kali-rootfs
-          sudo tar -xf rootfs.tar.xz -C kali-rootfs --strip-components=1 --warning=no-all
+          tar -xf rootfs.tar.xz -C kali-rootfs --strip-components=1 --warning=no-all
 
       - name: Update and Upgrade inside Proot
         run: |
-          sudo proot -S kali-rootfs /bin/bash -c "
-          sudo apt update &&
-          sudo apt upgrade -y &&
-          sudo apt autoclean -y
-          sudo apt autoremove -y
+          proot -S kali-rootfs /bin/bash -c "
+          apt update &&
+          apt upgrade -y &&
+          apt autoclean -y &&
+          apt autoremove -y
           "
 
       - name: Compress Updated RootFS
