@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -20,8 +20,9 @@ jobs:
           
       - name: Extract RootFS
         run: |
+          mkdir -p kali-arm64
           wget -q "https://kali.download/nethunter-images/current/rootfs/kali-nethunter-rootfs-minimal-arm64.tar.xz" -O rootfs.tar.xz
-          tar -xf rootfs.tar.xz --strip-components=1 --exclude=dev/*
+          tar -xf rootfs.tar.xz -C kali-arm64 --strip-components=1 --exclude=dev/*
 
       - name: Update and Upgrade inside Proot
         run: |
