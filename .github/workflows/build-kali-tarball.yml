@@ -1,215 +1,163 @@
-name: Build Kali Linux ARM64 Minimal
+name: Build Kali Linux ARM64 Minimal Tarball
 
 on:
   push:
-    tags: ['v*']
-  workflow_dispatch:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0, v2024.1.0, etc.
+  workflow_dispatch:  # Allow manual trigger from GitHub UI
     inputs:
-      tag_name:
-        description: 'Tag name (e.g., v1.0.0)'
+      version:
+        description: 'Kali version (e.g., 2024.4)'
         required: true
-        default: 'v1.0.0'
-      release_notes:
-        description: 'Release notes'
-        required: false
-        default: 'Kali Linux ARM64 minimal build'
-
-permissions:
-  contents: write
-  packages: write
+        default: 'rolling'
 
 env:
-  BUILD_DIR: ${{ github.workspace }}/build
-  ARTIFACT_NAME: kali-linux-arm64-minimal
+  KALI_VERSION: ${{ github.event.inputs.version || 'rolling' }}
+  OUTPUT_DIR: 'artifacts'
+  TARBALL_NAME: 'kali-linux-arm64-minimal'
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 120
-
+    runs-on: ubuntu-24.04-arm  # ARM runner
+    
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      with:
-        submodules: recursive
-
+      
     - name: Set up environment
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          live-build \
           debootstrap \
-          curl \
-          wget \
-          gnupg \
-          zip \
-          unzip \
-          xz-utils \
-          cpio \
-          dosfstools \
-          mtools \
-          squashfs-tools \
-          xorriso \
-          isolinux \
-          syslinux-efi \
           qemu-user-static \
-          binfmt-support
+          binfmt-support \
+          coreutils \
+          tar \
+          gzip \
+          wget \
+          curl \
+          gnupg \
+          parted \
+          kpartx \
+          e2fsprogs
         
-        # Enable ARM execution
-        sudo systemctl restart systemd-binfmt
-
-    - name: Create build directory
-      run: |
-        mkdir -p ${{ env.BUILD_DIR }}
-        cd ${{ env.BUILD_DIR }}
-
-    - name: Configure live-build
-      run: |
-        cd ${{ env.BUILD_DIR }}
-        lb config \
-          --architecture arm64 \
-          --distribution kali-rolling \
-          --binary-images tar \
-          --system live \
-          --apt-secure true \
-          --apt-recommends false \
-          --debian-installer false \
-          --updates false \
-          --security-updates false \
-          --firmware-binary false \
-          --clean \
-          --checksums sha256
+        # Enable ARM emulation
+        sudo update-binfmts --enable qemu-aarch64
         
-        # Create minimal package list
-        mkdir -p config/package-lists/
-        cat > config/package-lists/kali.list.chroot << 'EOF'
-        kali-linux-core
-        kali-tweaks
-        network-manager
-        sudo
-        curl
-        wget
-        vim
-        openssh-server
-        kali-defaults
+        echo "KALI_VERSION=$KALI_VERSION" >> $GITHUB_ENV
+        echo "BUILD_DATE=$(date +%Y%m%d)" >> $GITHUB_ENV
+        echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+        
+    - name: Create minimal Kali Linux rootfs
+      run: |
+        set -e
+        
+        # Create directories
+        mkdir -p ${{ env.OUTPUT_DIR }}
+        ROOTFS_DIR="${{ runner.temp }}/kali-rootfs"
+        mkdir -p "${ROOTFS_DIR}"
+        
+        # Debootstrap Kali Linux
+        sudo debootstrap \
+          --arch=arm64 \
+          --foreign \
+          kali-rolling \
+          "${ROOTFS_DIR}" \
+          http://http.kali.org/kali
+        
+        # Copy ARM64 static QEMU
+        sudo cp /usr/bin/qemu-aarch64-static "${ROOTFS_DIR}/usr/bin/"
+        
+        # Second stage debootstrap
+        sudo chroot "${ROOTFS_DIR}" /debootstrap/debootstrap --second-stage
+        
+        # Setup basic system
+        sudo chroot "${ROOTFS_DIR}" /bin/bash <<-'EOF'
+          set -e
+          
+          # Configure apt sources
+          echo "deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list
+          echo "deb-src http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware" >> /etc/apt/sources.list
+          
+          # Set up locale
+          echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
+          locale-gen
+          echo "LANG=en_US.UTF-8" > /etc/locale.conf
+          
+          # Update and install minimal packages
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
+          
+          # Install minimal Kali Linux packages
+          DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            kali-linux-core \
+            kali-tweaks \
+            kali-themes \
+            network-manager \
+            sudo \
+            systemd \
+            dbus \
+            openssh-server \
+            nano \
+            wget \
+            curl \
+            gnupg \
+            ca-certificates
+          
+          # Clean up
+          apt-get clean
+          rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+          
+          # Create default user
+          echo "kali:kali" | chpasswd
+          usermod -aG sudo kali
+          
+          # Enable services
+          systemctl enable ssh
+          systemctl enable NetworkManager
         EOF
         
-        # Enable root login for SSH (remove for production)
-        mkdir -p config/includes.chroot/etc/ssh/
-        echo "PermitRootLogin yes" > config/includes.chroot/etc/ssh/sshd_config
-
-    - name: Build Kali Linux
-      run: |
-        cd ${{ env.BUILD_DIR }}
-        sudo lb build 2>&1 | tee build.log
+        # Clean up QEMU binary
+        sudo rm -f "${ROOTFS_DIR}/usr/bin/qemu-aarch64-static"
         
-        # Check if build succeeded
-        if [ -f "live-image-arm64.tar.xz" ]; then
-          echo "Build successful"
-          ls -la *.tar.xz
-        else
-          echo "Build failed"
-          exit 1
-        fi
-
-    - name: Generate checksums
-      run: |
-        cd ${{ env.BUILD_DIR }}
-        for file in *.tar.xz; do
-          sha256sum "$file" > "${file}.sha256"
-          sha512sum "$file" > "${file}.sha512"
-        done
-
-    - name: Prepare artifacts
-      run: |
-        cd ${{ env.BUILD_DIR }}
-        mkdir -p artifacts
+        # Create tarball
+        cd "${ROOTFS_DIR}"
+        sudo tar czf "${{ github.workspace }}/${{ env.OUTPUT_DIR }}/${{ env.TARBALL_NAME }}-${{ env.KALI_VERSION }}-${{ env.BUILD_DATE }}.tar.gz" .
         
-        # Move and rename artifacts
-        for file in live-image-*.tar.xz*; do
-          new_name="${file/live-image-arm64.tar.xz/${{ env.ARTIFACT_NAME }}-${{ github.ref_name }}.tar.xz}"
-          cp "$file" "artifacts/${new_name}"
-        done
+        # Create checksum
+        cd "${{ github.workspace }}/${{ env.OUTPUT_DIR }}"
+        sha256sum "${{ env.TARBALL_NAME }}-${{ env.KALI_VERSION }}-${{ env.BUILD_DATE }}.tar.gz" > "${{ env.TARBALL_NAME }}-${{ env.KALI_VERSION }}-${{ env.BUILD_DATE }}.tar.gz.sha256"
         
-        # Copy build log
-        cp build.log artifacts/build-${{ github.ref_name }}.log
+        # Create info file
+        cat > "${{ env.TARBALL_NAME }}-${{ env.KALI_VERSION }}-${{ env.BUILD_DATE }}.info" <<EOF
+        Kali Linux ARM64 Minimal Tarball
+        Version: ${{ env.KALI_VERSION }}
+        Build Date: ${{ env.BUILD_DATE }}
+        Architecture: arm64
+        Size: $(du -h "${{ env.TARBALL_NAME }}-${{ env.KALI_VERSION }}-${{ env.BUILD_DATE }}.tar.gz" | cut -f1)
+        SHA256: $(sha256sum "${{ env.TARBALL_NAME }}-${{ env.KALI_VERSION }}-${{ env.BUILD_DATE }}.tar.gz" | cut -d' ' -f1)
         
-        ls -la artifacts/
-
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
+        Installation:
+        1. Extract to SD card: sudo tar xzf <tarball> -C /path/to/mounted/sd-card
+        2. Resize filesystem: sudo resize2fs /dev/sdX2
+        3. Boot and login as kali/kali
+        EOF
+        
+    - name: Upload to GitHub Releases
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
       with:
-        name: kali-arm64-build
-        path: ${{ env.BUILD_DIR }}/artifacts/
-        retention-days: 5
-
-  release:
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'push' || github.event.inputs.tag_name
-    
-    steps:
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: kali-arm64-build
-        path: artifacts
-
-    - name: Determine tag name
-      id: tag_name
-      run: |
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
-        else
-          echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-        fi
-
-    - name: Create Release
-      id: create_release
-      uses: softprops/action-gh-release@v2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ steps.tag_name.outputs.TAG_NAME }}
-        name: Kali Linux ARM64 Minimal ${{ steps.tag_name.outputs.TAG_NAME }}
-        body: |
-          Kali Linux ARM64 Minimal Build
-          
-          **Build Details:**
-          - Version: ${{ steps.tag_name.outputs.TAG_NAME }}
-          - Date: $(date -u +'%Y-%m-%d')
-          - Architecture: ARM64 (aarch64)
-          - Base: Kali Rolling
-          
-          **SHA256 Checksums:**
-          ```
-          $(cat artifacts/*.sha256)
-          ```
-          
-          **Usage:**
-          ```bash
-          # Extract and use
-          tar xf kali-linux-arm64-minimal-*.tar.xz
-          ```
+        files: |
+          ${{ env.OUTPUT_DIR }}/*.tar.gz
+          ${{ env.OUTPUT_DIR }}/*.sha256
+          ${{ env.OUTPUT_DIR }}/*.info
         draft: false
         prerelease: false
-        files: |
-          artifacts/*.tar.xz
-          artifacts/*.sha256
-          artifacts/*.sha512
-          artifacts/build-*.log
-
-  notify:
-    runs-on: ubuntu-latest
-    needs: [build, release]
-    if: always()
-    
-    steps:
-    - name: Build Status
-      run: |
-        if [ "${{ needs.build.result }}" = "success" ]; then
-          echo "✅ Build completed successfully"
-        else
-          echo "❌ Build failed"
-          exit 1
-        fi
+        
+    - name: Upload artifacts (for workflow_dispatch)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: kali-arm64-minimal-${{ env.KALI_VERSION }}-${{ env.BUILD_DATE }}
+        path: ${{ env.OUTPUT_DIR }}/
+        retention-days: 7
