@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,9 +27,7 @@ jobs:
         run: |
           proot -S kali-arm64 /bin/bash -c "
           apt update &&
-          apt upgrade -y &&
-          apt autoclean -y &&
-          apt autoremove -y
+          apt upgrade -y
           "
 
       - name: Compress Updated RootFS
