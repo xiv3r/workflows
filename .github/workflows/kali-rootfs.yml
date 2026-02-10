@@ -1,4 +1,4 @@
-name: Build Kali Linux ARM64 Rootfs
+name: Build Kali ARM64 Rootfs
 
 on:
   workflow_dispatch:
@@ -8,64 +8,81 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: debian:bookworm-slim
-      options: --privileged
     
     steps:
     - name: Checkout
       uses: actions/checkout@v4
     
-    - name: Install dependencies
+    - name: Install multiarch support
       run: |
-        apt-get update
-        apt-get install -y debootstrap qemu-user-static tar gzip
+        # Update and install packages
+        sudo apt-get update
+        sudo apt-get install -y \
+          qemu-user-static \
+          binfmt-support \
+          debootstrap \
+          proot \
+          tar \
+          gzip
+        
+        # Register ARM64
+        sudo update-binfmts --enable qemu-aarch64
     
-    - name: Build rootfs
+    - name: Build rootfs with proot (no chroot needed)
       run: |
-        # Create rootfs
-        debootstrap \
+        # Create directory
+        mkdir -p kali-rootfs
+        
+        # Build rootfs using debootstrap with qemu
+        sudo debootstrap \
           --arch=arm64 \
+          --foreign \
           --variant=minbase \
-          --include=kali-linux-core \
           kali-rolling \
-          /kali-rootfs \
+          kali-rootfs \
           http://http.kali.org/kali
         
+        # Copy qemu-aarch64-static into rootfs
+        sudo cp /usr/bin/qemu-aarch64-static kali-rootfs/usr/bin/
+        
+        # Second stage debootstrap
+        sudo chroot kali-rootfs /debootstrap/debootstrap --second-stage
+        
         # Clean up
-        rm -rf /kali-rootfs/var/cache/apt/archives/*
-        rm -rf /kali-rootfs/var/lib/apt/lists/*
+        sudo rm -f kali-rootfs/usr/bin/qemu-aarch64-static
+        sudo rm -rf kali-rootfs/var/cache/apt/archives/*
+        sudo rm -rf kali-rootfs/var/lib/apt/lists/*
         
         # Get version
-        if [ -n "${GITHUB_REF_NAME}" ]; then
-          VERSION="${GITHUB_REF_NAME#v}"
+        if [ -n "${{ github.ref_name }}" ]; then
+          VERSION="${{ github.ref_name }}"
         else
-          VERSION="$(date +'%Y.%m.%d')"
+          VERSION="build-$(date +'%Y%m%d-%H%M%S')"
         fi
         
-        # Create tarball
         FILENAME="kali-linux-arm64-minimal-${VERSION}.tar.gz"
-        tar -czf "${FILENAME}" -C /kali-rootfs .
+        
+        # Create tarball
+        sudo tar -czf "${FILENAME}" -C kali-rootfs .
+        sudo chown $USER:$USER "${FILENAME}"
         
         echo "FILENAME=${FILENAME}" >> $GITHUB_ENV
         echo "VERSION=${VERSION}" >> $GITHUB_ENV
         
         ls -lh "${FILENAME}"
+        echo "File created: ${FILENAME}"
     
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: ncipollo/release-action@v1
       if: startsWith(github.ref, 'refs/tags/')
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ github.ref_name }}
-        name: Kali Linux ARM64 Minimal ${{ env.VERSION }}
-        files: ${{ env.FILENAME }}
-        draft: false
-        prerelease: false
+        tag: ${{ github.ref_name }}
+        name: Kali Linux ARM64 ${{ env.VERSION }}
+        artifacts: ${{ env.FILENAME }}
+        token: ${{ secrets.GITHUB_TOKEN }}
     
-    - name: Upload build artifact
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: kali-arm64-rootfs
+        name: kali-rootfs
         path: ${{ env.FILENAME }}
