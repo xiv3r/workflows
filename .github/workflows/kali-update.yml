@@ -25,14 +25,15 @@ jobs:
       - name: Extract RootFS
         run: |
           mkdir -p kali-rootfs
-          tar -xf rootfs.tar.xz -C kali-rootfs --strip-components=1
+          sudo tar -xf rootfs.tar.xz -C kali-rootfs --strip-components=1
 
       - name: Update and Upgrade inside Proot
         run: |
-          proot -S kali-rootfs /bin/bash -c "
-          apt-get update &&
-          apt-get upgrade -y &&
-          apt-get clean
+          sudo proot -S kali-rootfs /bin/bash -c "
+          sudo apt update &&
+          sudo apt upgrade -y &&
+          sudo apt autoclean -y
+          sudo apt autoremove -y
           "
 
       - name: Compress Updated RootFS
