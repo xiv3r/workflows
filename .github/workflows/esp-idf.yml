@@ -1,0 +1,46 @@
+name: Build ESP8266 Firmware
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup ESP-IDF
+      run: |
+        # One-liner setup
+        sudo apt-get update && sudo apt-get install -y git wget flex bison gperf python3 python3-pip cmake ninja-build
+        git clone --depth 1 https://github.com/espressif/ESP8266_RTOS_SDK.git ~/esp-idf
+        cd ~/esp-idf && ./install.sh
+        . ~/esp-idf/export.sh
+    
+    - name: Build
+      run: |
+        . ~/esp-idf/export.sh
+        cd .  # Change to your project folder if needed
+        idf.py set-target esp8266
+        idf.py build
+    
+    - name: Package and Release
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        # Create zip with firmware
+        mkdir -p release
+        cp build/*.bin release/ 2>/dev/null || true
+        cd release
+        zip -r ../firmware-${{ github.ref_name }}.zip .
+        cd ..
+        
+        # Create release using GitHub CLI
+        gh release create ${{ github.ref_name }} \
+          --title "Firmware ${{ github.ref_name }}" \
+          --notes "Auto-generated firmware release" \
+          firmware-${{ github.ref_name }}.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
