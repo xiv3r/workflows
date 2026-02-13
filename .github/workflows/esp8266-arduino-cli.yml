@@ -42,18 +42,13 @@ jobs:
         arduino-cli core list
         echo "Checking available boards:"
         arduino-cli board listall esp8266
-    
-    - name: Find and compile .ino files
+        
+    - name: Compile .ino file
       run: |
-        cd xiver
-        # Find all .ino files in the repository
-        for ino in $(find . -name "ESP8266_Relay_Controller.ino"); do
-          echo "Compiling: $ino"
-          dir=$(dirname "$ino")
-          cd "$dir"
-          arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 --output-dir ./output .
-          cd - || exit
-        done
+          cd xiver/ESP8266_Relay_Controller
+          arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 \
+          --output-dir ./output \
+          ESP8266_Relay_Controller.ino
     
     - name: Upload compiled binaries
       uses: actions/upload-artifact@v4
