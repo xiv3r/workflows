@@ -16,13 +16,14 @@ jobs:
       run: |
         git clone https://github.com/xiv3r/ESP8266-ESP32-8x8-relay-auto-switch.git
         mkdir -p xiver
-        mv ESP8266-ESP32-8x8-relay-auto-switch/* xiver
+        mv ESP8266-ESP32-8x8-relay-auto-switch/* xiver/
         cd xiver
     
     - name: Install Arduino CLI
       run: |
         curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
-        sudo mv arduino-cli /usr/local/bin/
+        # The install script puts arduino-cli in bin/arduino-cli, not in the current directory
+        sudo mv bin/arduino-cli /usr/local/bin/
         arduino-cli version
     
     - name: Configure Arduino CLI
@@ -37,7 +38,7 @@ jobs:
     
     - name: Find and compile .ino files
       run: |
-        cd your-repo
+        cd xiver
         # Find all .ino files in the repository
         for ino in $(find . -name "ESP8266_Relay_Controller.ino"); do
           echo "Compiling: $ino"
