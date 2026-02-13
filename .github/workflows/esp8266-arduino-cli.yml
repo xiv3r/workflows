@@ -45,13 +45,17 @@ jobs:
         
     - name: Compile .ino file
       run: |
-          cd xiver
-          arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 \
-          --output-dir ./output \
-          ESP8266_Relay_Controller.ino
+        cd xiver
+        # Fix: Create proper sketch folder structure
+        mkdir -p ESP8266_Relay_Controller
+        mv ESP8266_Relay_Controller.ino ESP8266_Relay_Controller/
+        cd ESP8266_Relay_Controller
+        arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 \
+          --output-dir ../output \
+          ./
     
     - name: Upload compiled binaries
       uses: actions/upload-artifact@v4
       with:
         name: esp8266-firmware
-        path: xiver/**/output/*.bin
+        path: xiver/output/*.bin
