@@ -39,7 +39,7 @@ jobs:
       run: |
         cd your-repo
         # Find all .ino files in the repository
-        for ino in $(find . -name "*.ino"); do
+        for ino in $(find . -name "ESP8266_Relay_Controller.ino"); do
           echo "Compiling: $ino"
           dir=$(dirname "$ino")
           cd "$dir"
