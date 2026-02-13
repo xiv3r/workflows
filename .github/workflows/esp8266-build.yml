@@ -15,9 +15,9 @@ jobs:
       # Clone the repository
       - name: Clone repository
         run: |
-          git clone https://github.com/xiv3r/ESP8266-ESP32-8x8-relay-auto-switch.git
+          git clone https://github.com/username/esp8266-project.git
           mkdir -p esp8266-project
-          mv ESP8266-ESP32-8x8-relay-auto-switch/* esp8266-project/
+          mv  /* mkdir -p esp8266-project
           cd esp8266-project
       
       # Setup ESP-IDF for ESP8266
@@ -40,7 +40,7 @@ jobs:
           if [ "${{ github.event_name }}" == "release" ]; then
             TAG_NAME="${{ github.event.release.tag_name }}"
           else
-            TAG_NAME="esp8266-firmware"
+            TAG_NAME="firmware-esp8266"
           fi
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
       
@@ -84,21 +84,6 @@ jobs:
             }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      # Upload firmware as build artifacts (always)
-      - name: Upload firmware artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: esp8266-firmware-${{ steps.get_tag.outputs.tag_name }}
-          path: |
-            ./esp8266-project/build/bootloader/bootloader.bin
-            ./esp8266-project/build/partition_table/partition-table.bin
-            ./esp8266-project/build/*.bin
-            ./esp8266-project/build/*.elf
-            ./esp8266-project/build/flash_args
-            ./esp8266-project/build/config/sdkconfig.h
-          if-no-files-found: error
-          retention-days: 30
       
       # Create combined firmware binary (similar to the Extract Firmware workflow)
       - name: Create combined firmware binary
