@@ -36,6 +36,12 @@ jobs:
         arduino-cli core install esp8266:esp8266@3.1.2
         arduino-cli core list
     
+    - name: Install required libraries
+      run: |
+        arduino-cli lib update-index
+        arduino-cli lib install "ArduinoJson@6.21.5"
+        arduino-cli lib list
+        
     - name: Verify ESP8266 core installation
       run: |
         echo "Checking installed cores:"
@@ -46,7 +52,7 @@ jobs:
     - name: Compile .ino file
       run: |
         cd xiver
-        # Fix: Create proper sketch folder structure
+        # Create proper sketch folder structure
         mkdir -p ESP8266_Relay_Controller
         mv ESP8266_Relay_Controller.ino ESP8266_Relay_Controller/
         cd ESP8266_Relay_Controller
