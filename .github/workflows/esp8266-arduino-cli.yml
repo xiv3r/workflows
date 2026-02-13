@@ -17,30 +17,37 @@ jobs:
         git clone https://github.com/xiv3r/ESP8266-ESP32-8x8-relay-auto-switch.git
         mkdir -p xiver
         mv ESP8266-ESP32-8x8-relay-auto-switch/* xiver/
-        cd xiver
     
     - name: Install Arduino CLI
       run: |
-        curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
-        # The install script puts arduino-cli in bin/arduino-cli, not in the current directory
-        sudo mv bin/arduino-cli /usr/local/bin/
+        curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
         arduino-cli version
     
     - name: Configure Arduino CLI
       run: |
         arduino-cli config init
+        # Add ESP8266 board manager URL
+        arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
         arduino-cli core update-index
     
     - name: Install ESP8266 core
       run: |
-        arduino-cli core install esp8266:esp8266
+        arduino-cli core search esp8266
+        arduino-cli core install esp8266:esp8266@3.1.2
         arduino-cli core list
+    
+    - name: Verify ESP8266 core installation
+      run: |
+        echo "Checking installed cores:"
+        arduino-cli core list
+        echo "Checking available boards:"
+        arduino-cli board listall esp8266
     
     - name: Find and compile .ino files
       run: |
         cd xiver
         # Find all .ino files in the repository
-        for ino in $(find . -name "ESP8266_Relay_Controller.ino"); do
+        for ino in $(find . -name "*.ino"); do
           echo "Compiling: $ino"
           dir=$(dirname "$ino")
           cd "$dir"
