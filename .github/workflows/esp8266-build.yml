@@ -1,126 +1,32 @@
-name: Build ESP8266 and Release Firmware
+name: Build ESP8266
 
-on:
-  workflow_dispatch:
-  push:
-    branches: [main, master]
-  release:
-    types: [published]
+on: workflow_dispatch
 
 jobs:
   build:
     runs-on: ubuntu-latest
     
     steps:
-      # Clone the repository
-      - name: Clone repository
-        run: |
-          git clone https://github.com/username/esp8266-project.git
-          mkdir -p esp8266-project
-          mv  /* mkdir -p esp8266-project
-          cd esp8266-project
-      
-      # Setup ESP-IDF for ESP8266
-      - name: Build with ESP-IDF
-        uses: espressif/install-esp-idf-action@v1
-        with:
-          version: v5.3.2
-          target: esp8266
-          path: ./esp8266-project
-      
-      # Build the firmware
-      - name: Build firmware
-        working-directory: ./esp8266-project
-        run: idf.py build
-      
-      # Determine release tag
-      - name: Determine release tag
-        id: get_tag
-        run: |
-          if [ "${{ github.event_name }}" == "release" ]; then
-            TAG_NAME="${{ github.event.release.tag_name }}"
-          else
-            TAG_NAME="firmware-esp8266"
-          fi
-          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
-      
-      # Delete existing release assets if this is a release event
-      - name: Delete existing release assets
-        if: github.event_name == 'release'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { data: releases } = await github.rest.repos.listReleases({
-              owner: context.repo.owner,
-              repo: context.repo.repo
-            });
-            
-            const targetRelease = releases.find(release => release.tag_name === '${{ steps.get_tag.outputs.tag_name }}');
-            
-            if (targetRelease) {
-              console.log(`Found release with tag: ${{ steps.get_tag.outputs.tag_name }}`);
-              console.log(`Release ID: ${targetRelease.id}`);
-              
-              const { data: assets } = await github.rest.repos.listReleaseAssets({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                release_id: targetRelease.id
-              });
-              
-              console.log(`Found ${assets.length} assets to delete`);
-              
-              for (const asset of assets) {
-                console.log(`Deleting asset: ${asset.name} (ID: ${asset.id})`);
-                await github.rest.repos.deleteReleaseAsset({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  asset_id: asset.id
-                });
-              }
-              
-              console.log('All existing assets deleted');
-            } else {
-              console.log(`No release found with tag: ${{ steps.get_tag.outputs.tag_name }}`);
-            }
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      # Create combined firmware binary (similar to the Extract Firmware workflow)
-      - name: Create combined firmware binary
-        run: |
-          mkdir -p downloads
-          # Combine relevant binaries into a single firmware.bin file
-          # This is a simplified example - adjust based on your actual ESP8266 memory layout
-          cat ./esp8266-project/build/bootloader/bootloader.bin \
-              ./esp8266-project/build/partition_table/partition-table.bin \
-              ./esp8266-project/build/esp8266-project.bin > downloads/firmware.bin || true
-          
-          # If the above fails, just copy the main binary
-          if [ ! -f downloads/firmware.bin ] || [ ! -s downloads/firmware.bin ]; then
-            cp ./esp8266-project/build/esp8266-project.bin downloads/firmware.bin
-          fi
-      
-      # Upload to GitHub Release
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ steps.get_tag.outputs.tag_name }}
-          name: Firmware Release ${{ steps.get_tag.outputs.tag_name }}
-          body: |
-            Automated firmware build from commit ${{ github.sha }}
-            
-            Build date: ${{ steps.get_tag.outputs.tag_name }}
-            Includes:
-            - Bootloader
-            - Partition table
-            - Application firmware
-          files: |
-            downloads/firmware.bin
-            ./esp8266-project/build/bootloader/bootloader.bin
-            ./esp8266-project/build/partition_table/partition-table.bin
-            ./esp8266-project/build/esp8266-project.bin
-            ./esp8266-project/build/flash_args
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Clone external repository
+      run: |
+        git clone https://github.com/xiv3r/ESP8266-ESP32-8x8-relay-auto-switch.git
+        mkdir -p repository
+        mv ESP8266-ESP32-8x8-relay-auto-switch.git/* repository/
+        cd repository
+    
+    - name: Install PlatformIO
+      run: pip install platformio
+    
+    - name: Build firmware
+      run: |
+        cd repository
+        platformio init --board nodemcuv2
+        mkdir -p src
+        cp ESP8266_Relay_Controller.ino src/ 2>/dev/null || true
+        platformio run
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: built-firmware
+        path: repository/.pio/build/nodemcuv2/firmware.bin
