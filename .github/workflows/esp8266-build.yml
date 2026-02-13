@@ -1,4 +1,4 @@
-name: Build ESP8266
+name: ESP8266 firmware platform.ini
 
 on: workflow_dispatch
 
@@ -26,7 +26,7 @@ jobs:
         platformio run
     
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: built-firmware
         path: repository/.pio/build/nodemcuv2/firmware.bin
