@@ -45,7 +45,7 @@ jobs:
         
     - name: Compile .ino file
       run: |
-          cd xiver/ESP8266_Relay_Controller
+          cd xiver
           arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 \
           --output-dir ./output \
           ESP8266_Relay_Controller.ino
