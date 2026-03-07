@@ -2,11 +2,7 @@ name: ESP8266 Firmware arduino
 
 on:
   workflow_dispatch:  # Manual trigger
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-
+  
 jobs:
   build:
     runs-on: ubuntu-latest
