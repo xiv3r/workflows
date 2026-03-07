@@ -1,0 +1,38 @@
+name: Kali ARM64
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly
+
+jobs:
+  package-kali:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Kali ARM64 Rootfs
+        run: |
+          # Get the latest Kali ARM64 rootfs from official images
+          wget https://kali.download/nethunter-images/current/rootfs/kali-nethunter-rootfs-minimal-arm64.tar.xz
+
+      - name: Create release package
+        run: |
+          mkdir -p output
+          # If download succeeded, use it; otherwise create minimal rootfs
+          if [ -f kali-nethunter-*.tar.xz ]; then
+            cp kali-nethunter-*.tar.xz output/
+          else
+            # Create a minimal rootfs file as placeholder
+            echo "Creating placeholder - manual build required" > output/README.txt
+            echo "Visit https://www.kali.org/get-kali/#kali-arm64" >> output/README.txt
+          fi
+          
+          cd output
+          if [ -f *.tar.xz ]; then
+            sha256sum *.tar.xz > checksums.txt
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kali-arm64
+          path: output/
