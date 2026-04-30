@@ -1,8 +1,9 @@
 /*
 ============================================================
- *  ESP32 18-Channel Relay Smart Switch — Firmware v5.1
+ *  ESP32-C3 14-Channel Relay Smart Switch — Firmware v5.1
  *  Added Day-of-Week + Day-of-Month Scheduling Support
- *  RTC: DS3231 on I2C (GPIO21=SDA, GPIO22=SCL)
+ *  RTC: DS3231 on I2C (GPIO4=SDA, GPIO5=SCL)
+ *  Migrated for ESP32-C3 with specific GPIO configuration
 ============================================================
  */
 
@@ -19,7 +20,7 @@
 
 // ─── Preferences (NVS) ───────────────────────────────────────────────────────
 Preferences preferences;
-#define NVS_NAMESPACE "relay18"
+#define NVS_NAMESPACE "relay14"
 
 #define EEPROM_MAGIC   0x1234
 #define EEPROM_VERSION 5        // v5: added day-of-month support
@@ -45,7 +46,7 @@ static const unsigned long RTC_UPDATE_INTERVAL  =     100UL;
 static const unsigned long WIFI_SCAN_TIMEOUT    =   10000UL;
 
 // ─── mDNS settings ────────────────────────────────────────────────────────────
-#define MDNS_HOSTNAME_DEFAULT "esp32-18ch-relay"
+#define MDNS_HOSTNAME_DEFAULT "esp32c3-14ch-relay"
 static const unsigned long MDNS_RESTART_DELAY = 2000UL;
 
 // ─── NTP fallback pool ───────────────────────────────────────────────────────
@@ -71,13 +72,12 @@ RTC_DS3231 rtc;
 bool rtcAvailable = false;
 
 // ─── Relay config ────────────────────────────────────────────────────────────
-#define NUM_RELAYS 18
-// Relays on: 16, 17, 18, 19, 23, 25, 26, 27, 32, 33, 13, 14, 4, 5, 15, 2, 3(RX), 1(TX)
-// GPIO21 (SDA) and GPIO22 (SCL) reserved for DS3231 I2C
+#define NUM_RELAYS 14
+// ESP32-C3 GPIO pins: 0,1,2,3,6,7,8,9,10,11,18,19,20,21
+// GPIO4 (SDA) and GPIO5 (SCL) reserved for DS3231 I2C
 const int  relayPins[NUM_RELAYS] = { 
-    16, 17, 18, 19, 23, 25, 26, 27, 
-    32, 33, 13, 14, 4, 5,
-    15, 2, 3, 1  // RX=GPIO3, TX=GPIO1 (new)
+    0, 1, 2, 3, 6, 7, 8, 9, 
+    10, 11, 18, 19, 20, 21
 };
 const bool relayActiveLow = true;
 
@@ -157,8 +157,8 @@ volatile int  scanResultCount = -1;
 unsigned long scanStartTime   = 0;
 
 // AP copies
-char ap_ssid[32]     = "ESP32_18CH_Timer_Switch";
-char ap_password[32] = "ESP32-admin";
+char ap_ssid[32]     = "ESP32_C3_14CH_Timer_Switch";
+char ap_password[32] = "ESP32C3-admin";
 
 // mDNS
 bool          mdnsStarted           = false;
@@ -306,10 +306,10 @@ hr{border:none;border-top:1px solid #ECEFF1;margin:14px 0}
 // ─────────────────────────────────────────────────────────────────────────────
 const char index_html[] PROGMEM = R"raw(<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Relays — ESP32 Timer Switch</title>
+<title>Relays — ESP32-C3 Timer Switch</title>
 <link rel="stylesheet" href="/style.css"></head><body>
 <header>
-<span class="logo">&#x26A1; ESP32 18-CH</span>
+<span class="logo">&#x26A1; ESP32-C3 14-CH</span>
 <nav>
 <a href="/" class="cur">Relays</a>
 <a href="/wifi">WiFi</a>
@@ -569,10 +569,10 @@ setInterval(()=>{if(!busy)load();},60000);
 // ─────────────────────────────────────────────────────────────────────────────
 const char wifi_html[] PROGMEM = R"raw(<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WiFi — ESP32 Timer Switch</title>
+<title>WiFi — ESP32-C3 Timer Switch</title>
 <link rel="stylesheet" href="/style.css"></head><body>
 <header>
-<span class="logo">&#x26A1; ESP32 18-CH</span>
+<span class="logo">&#x26A1; ESP32-C3 14-CH</span>
 <nav>
 <a href="/">Relays</a>
 <a href="/wifi" class="cur">WiFi</a>
@@ -676,10 +676,10 @@ function save(){
 
 const char ntp_html[] PROGMEM = R"raw(<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Time — ESP32 Timer Switch</title>
+<title>Time — ESP32-C3 Timer Switch</title>
 <link rel="stylesheet" href="/style.css"></head><body>
 <header>
-<span class="logo">&#x26A1; ESP32 18-CH</span>
+<span class="logo">&#x26A1; ESP32-C3 14-CH</span>
 <nav>
 <a href="/">Relays</a>
 <a href="/wifi">WiFi</a>
@@ -739,10 +739,10 @@ function sync(){
 
 const char ap_html[] PROGMEM = R"raw(<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AP — ESP32 Timer Switch</title>
+<title>AP — ESP32-C3 Timer Switch</title>
 <link rel="stylesheet" href="/style.css"></head><body>
 <header>
-<span class="logo">&#x26A1; ESP32 18-CH</span>
+<span class="logo">&#x26A1; ESP32-C3 14-CH</span>
 <nav>
 <a href="/">Relays</a>
 <a href="/wifi">WiFi</a>
@@ -806,10 +806,10 @@ function save(){
 
 const char system_html[] PROGMEM = R"raw(<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>System — ESP32 Timer Switch</title>
+<title>System — ESP32-C3 Timer Switch</title>
 <link rel="stylesheet" href="/style.css"></head><body>
 <header>
-<span class="logo">&#x26A1; ESP32 18-CH</span>
+<span class="logo">&#x26A1; ESP32-C3 14-CH</span>
 <nav>
 <a href="/">Relays</a>
 <a href="/wifi">WiFi</a>
@@ -858,7 +858,7 @@ function loadSys(){
     document.getElementById('srs').textContent=d.wifiConnected?rssiDesc(d.rssi):'\u2014';
     document.getElementById('snt').textContent=d.ntpSynced?(d.ntpSyncAge>0?Math.floor(d.ntpSyncAge/60)+' min ago':'Just now'):'Never';
     document.getElementById('sns').textContent=d.ntpServer||'\u2014';
-    document.getElementById('sch').textContent=d.chipModel||'ESP32';
+    document.getElementById('sch').textContent=d.chipModel||'ESP32-C3';
     document.getElementById('smdns').textContent=d.mdnsStarted ? d.mdnsHostname+'.local' : 'Not running';
   }).catch(()=>{});
 }
@@ -1064,7 +1064,7 @@ void restartAP() {
 }
 
 // =============================================================================
-//  mDNS FUNCTIONS (Unchanged)
+//  mDNS FUNCTIONS (Updated for ESP32-C3)
 // =============================================================================
 
 void startMDNS() {
@@ -1094,9 +1094,9 @@ void startMDNS() {
     while (retries-- > 0) {
         if (MDNS.begin(mdnsHostname)) {
             MDNS.addService("http", "tcp", 80);
-            MDNS.addServiceTxt("http", "tcp", "model", "ESP32-18CH-Relay");
+            MDNS.addServiceTxt("http", "tcp", "model", "ESP32-C3-14CH-Relay");
             MDNS.addServiceTxt("http", "tcp", "version", "v5.1");
-            MDNS.addServiceTxt("http", "tcp", "channels", "18");
+            MDNS.addServiceTxt("http", "tcp", "channels", "14");
             
             mdnsStarted = true;
             return;
@@ -1152,15 +1152,16 @@ void setMDNSHostname(const char* hostname) {
 }
 
 // =============================================================================
-//  SETUP (Modified for DS3231 + Serial output removed)
+//  SETUP (Modified for ESP32-C3 with DS3231 on GPIO4/5)
 // =============================================================================
 
 void setup() {
-
-    // Safe relay state first
+    // Safe relay state first - ensure all relays are OFF at startup
     for (int i = 0; i < NUM_RELAYS; i++) {
-        pinMode(relayPins[i], OUTPUT);
-        digitalWrite(relayPins[i], relayActiveLow ? HIGH : LOW);
+        if (relayPins[i] >= 0 && relayPins[i] <= 21) {
+            pinMode(relayPins[i], OUTPUT);
+            digitalWrite(relayPins[i], relayActiveLow ? HIGH : LOW);
+        }
     }
     
     // Initialize relay configs with safe defaults
@@ -1175,14 +1176,13 @@ void setup() {
         snprintf(relayConfigs[i].name, 16, "Relay %d", i + 1);
     }
 
-    // Initialize I2C for DS3231 on GPIO21(SDA) and GPIO22(SCL)
-    Wire.begin(21, 22);
+    // Initialize I2C for DS3231 on GPIO4(SDA) and GPIO5(SCL)
+    Wire.begin(4, 5);
     
     // Initialize DS3231 RTC
     if (rtc.begin()) {
         rtcAvailable = true;
         if (rtc.lostPower()) {
-            // If RTC lost power, set to compile time initially
             rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
         }
         syncFromDS3231();
@@ -1195,7 +1195,7 @@ void setup() {
     loadExtConfig();
     loadRTCState();
 
-    // Set WiFi mode
+    // Set WiFi mode for ESP32-C3
     WiFi.mode(WIFI_AP_STA);
     
     // WiFi STA
@@ -1245,6 +1245,14 @@ void setup() {
     
     // Setup web server
     setupWebServer();
+    
+    // ESP32-C3 info
+    Serial.begin(115200);
+    Serial.println("ESP32-C3 14-Channel Relay Smart Switch v5.1");
+    Serial.println("GPIO pins: 0,1,2,3,6,7,8,9,10,11,18,19,20,21");
+    Serial.println("DS3231 RTC on GPIO4 (SDA) and GPIO5 (SCL)");
+    Serial.print("AP IP: ");
+    Serial.println(WiFi.softAPIP());
 }
 
 // =============================================================================
@@ -1414,20 +1422,20 @@ void initDefaults() {
     memset(&sysConfig, 0, sizeof(SystemConfig));
     sysConfig.magic           = EEPROM_MAGIC;
     sysConfig.version         = EEPROM_VERSION;
-    strcpy(sysConfig.ap_ssid,     "ESP32_18CH_Timer_Switch");
-    strcpy(sysConfig.ap_password, "ESP32-admin");
+    strcpy(sysConfig.ap_ssid,     "ESP32C3_14CH_Timer");
+    strcpy(sysConfig.ap_password, "ESP32C3-admin");
     strcpy(sysConfig.ntp_server,  "ph.pool.ntp.org");
     sysConfig.gmt_offset      = 28800;
     sysConfig.daylight_offset = 0;
     sysConfig.last_rtc_epoch  = 0;
     sysConfig.rtc_drift       = 1.0f;
-    strcpy(sysConfig.hostname, "esp32relay");
+    strcpy(sysConfig.hostname, "esp32c3relay");
     
     for (int i = 0; i < NUM_RELAYS; i++) {
         memset(&relayConfigs[i], 0, sizeof(RelayConfig));
         for (int s = 0; s < 8; s++) {
             relayConfigs[i].schedule.days[s] = DAY_ALL;
-            relayConfigs[i].schedule.monthDays[s] = 0;
+            relayConfigs[i].schedule.monthDays[s] = 0;  // Not used by default
         }
         snprintf(relayConfigs[i].name, 16, "Relay %d", i + 1);
     }
@@ -1649,7 +1657,7 @@ void setupWebServer() {
 // =============================================================================
 
 void handleGetRelays() {
-    DynamicJsonDocument doc(24576);  // Size appropriate for 18 relays with monthDays
+    DynamicJsonDocument doc(24576);  // Size appropriate for 14 relays with monthDays
     JsonArray root = doc.to<JsonArray>();
     
     for (int i = 0; i < NUM_RELAYS; i++) {
@@ -2043,7 +2051,7 @@ void handleGetSystem() {
     doc["wifiSSID"] = sysConfig.sta_ssid;
     doc["rssi"] = wifiConnected ? (int)WiFi.RSSI() : 0;
     doc["version"] = EEPROM_VERSION;
-    doc["chipModel"] = "ESP32";
+    doc["chipModel"] = "ESP32-C3";
     doc["mdnsHostname"] = getMDNSHostname();
     doc["mdnsStarted"] = mdnsStarted;
     
