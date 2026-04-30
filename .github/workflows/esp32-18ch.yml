@@ -1,4 +1,4 @@
-name: Build ESP32
+name: ESP BUILDER
 
 on:
   workflow_dispatch:
@@ -28,7 +28,7 @@ jobs:
         git clone --depth 1 --branch 1.14.1 https://github.com/adafruit/RTClib.git ~/Arduino/libraries/RTClib
 
         cd arduino
-        arduino-cli compile --fqbn esp32:esp32:esp32 --output-dir firmware .
+        arduino-cli compile --fqbn esp32:esp32:esp32c3 --output-dir firmware .
          
     - name: Determine release tag
       id: get_tag
